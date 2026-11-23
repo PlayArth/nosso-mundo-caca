@@ -8,7 +8,7 @@ const CONFIG = {
     "O dia em que você apareceu do nada… e resolveu ficar.",
     "O dia em que a conversa ganhou dois tracinhos azuis.",
     "O dia que viramos cartinha pokémon.",
-    "O dia em que eu fiquei mais nervoso que em qualquer prova.",
+    "O dia em que você ganhou um título novo (e eu também).",
   ],
   // Espera depois de um erro (segundos): começa em COOLDOWN_BASE e cresce
   // COOLDOWN_STEP a cada erro seguido no mesmo número, até COOLDOWN_MAX.
