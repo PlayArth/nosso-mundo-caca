@@ -2,16 +2,23 @@
  *  CONFIGURAÇÃO — ARTHUR, EDITE AQUI  ✏️
  * ===================================================================== */
 const CONFIG = {
-  // Dica da combinação do cadeado (fase 3). Troque quando decidir o código.
-  LOCK_HINT: "Os números estão na nossa história.",
+  // ---- Fase 3: cadeado com 4 números (0 a 31) ----
+  // Pistas que aparecem acima de cada número, na ordem. Edite à vontade.
+  LOCK_CLUES: [
+    "O dia em que você apareceu do nada… e resolveu ficar.",
+    "O dia em que a conversa ganhou dois tracinhos azuis.",
+    "O dia que viramos cartinha pokémon.",
+    "O dia em que eu fiquei mais nervoso que em qualquer prova.",
+  ],
+  // Espera depois de um erro (segundos): começa em COOLDOWN_BASE e cresce
+  // COOLDOWN_STEP a cada erro seguido no mesmo número, até COOLDOWN_MAX.
+  COOLDOWN_BASE: 3, COOLDOWN_STEP: 2, COOLDOWN_MAX: 15,
+  // Mensagem final quando os 4 números ficam verdes.
+  LOCK_DONE_TITLE: "Você conseguiu! ❤️",
+  LOCK_DONE_TEXT: "Agora espera o Arthur…",
 
-  // Onde a caixinha está escondida (fase 3). Ex.: "embaixo da nossa cama".
-  // Deixe genérico se quiser que ela procure mais.
-  BOX_HINT: "aqui por perto",
-
-  // (Opcional) Se o cartão dentro da caixinha tiver um QR, coloque aqui a URL
-  // completa dele. Aí o botão da câmera aparece na fase 3 e leva até lá.
-  // Vazio = fase 3 não mostra câmera (o cartão físico guia o próximo passo).
+  // (Opcional) Se houver um próximo QR depois da fase 3, coloque a URL completa
+  // aqui; aí a câmera aparece na fase 3. Vazio = sem câmera na fase 3.
   FINAL_QR_URL: "",
   FINAL_CODE: "",   // código digitável opcional para o FINAL_QR_URL
 };
@@ -36,11 +43,16 @@ const STEPS = [
     title: "Algumas coisas a gente guarda a sete chaves,",
     body: () => [
       "e essa é uma delas.",
-      "Procure uma caixinha trancada " + CONFIG.BOX_HINT + ". Pra abrir, você vai precisar de alguns números…",
-      CONFIG.LOCK_HINT,
-      "Quando conseguir abrir, o que estiver lá dentro vai te dizer o que fazer. ❤️"],
-    hint: "" },
+      "Descubra os quatro números, um de cada vez, e toque em Testar. As respostas estão na nossa história."],
+    hint: "", lock: true },
 ];
+
+// Respostas do cadeado guardadas só como hash. Pra trocar uma resposta, rode no console
+// do navegador: fnv("nmc|" + índice(0-3) + "|" + número) e cole o resultado aqui.
+const LOCK_H = ["b6ae7e4f", "d7d3ad79", "76598617", "c81a4fa6"];
+const LOCK_KEY = "nmc_lock_v1";
+const fnv = str => { let h = 0x811c9dc5; for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, "0"); };
+const lockOk = (i, v) => fnv("nmc|" + i + "|" + v) === LOCK_H[i];
 
 const KEY = "nmc_progress_v1";
 const $ = (s, r = document) => r.querySelector(s);
@@ -216,6 +228,7 @@ function showLetter(app, idx) {
   app.append(card);
   const delay = 1.2 + paras.length * 0.9;
   if (s.hint) { const h = el("p", "hint", esc(s.hint)); h.style.animationDelay = delay + "s"; app.append(h); }
+  if (s.lock) setTimeout(() => renderLock(app), (delay - 0.4) * 1000);
   if (nextTarget(idx)) {
     const bar = el("div", "actions");
     bar.innerHTML = `<div class="inner"><button class="typebtn" data-type>⌨️ digitar código</button>
@@ -225,6 +238,113 @@ function showLetter(app, idx) {
     $("[data-cam]", bar).onclick = () => openScanner(idx);
     $("[data-type]", bar).onclick = () => typeNext(idx);
   }
+}
+
+/* ---------- fase 3: cadeado ---------- */
+function lsGet(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function getLock() { return Math.max(0, Math.min(4, parseInt(lsGet(LOCK_KEY, 0), 10) || 0)); }
+const MISS_KEY = "nmc_lock_miss_v1"; // { misses, until }
+const pad2 = n => String(n).padStart(2, "0");
+const WRONG_MSGS = ["Quase! Respira e tenta de novo daqui a pouquinho ❤️", "Hmm, não é esse… pensa com calma 😊", "Ainda não… volta na nossa história 💭", "Não foi dessa vez, mas eu confio em você ❤️"];
+
+function renderLock(app) {
+  const panel = el("section", "lockpanel");
+  panel.innerHTML = `<div class="padlock" aria-hidden="true">
+      <svg viewBox="0 0 120 140"><path class="shackle" d="M32 64V42a28 28 0 0 1 56 0v22" fill="none" stroke-width="12" stroke-linecap="round"/>
+      <rect class="body" x="14" y="60" width="92" height="72" rx="16"/><circle cx="60" cy="92" r="9" class="hole"/><rect x="56" y="96" width="8" height="18" rx="3" class="hole"/></svg>
+    </div><div class="dials"></div>`;
+  app.append(panel);
+  const wrap = $(".dials", panel);
+  let solved = getLock();
+  const dials = CONFIG.LOCK_CLUES.slice(0, 4).map((clue, i) => {
+    const d = el("div", "dial");
+    d.innerHTML = `<div class="dial-head"><span class="dial-n">${i + 1}</span><p class="clue">${esc(clue)}</p></div>
+      <div class="entry">
+        <input class="num" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" placeholder="··" aria-label="número ${i + 1}">
+        <button class="test">Testar</button>
+        <span class="state" aria-hidden="true"></span>
+      </div>
+      <p class="dmsg" aria-live="polite"></p>`;
+    wrap.append(d);
+    return { d, i, inp: $(".num", d), btn: $(".test", d), msg: $(".dmsg", d) };
+  });
+  dials.forEach((o, i) => { if (i < solved) { for (let v = 0; v <= 99; v++) if (lockOk(i, v)) { o.inp.value = pad2(v); break; } } });
+
+  let timer = null;
+  const paint = () => dials.forEach(o => {
+    const { d, i } = o;
+    d.classList.toggle("ok", i < solved);
+    d.classList.toggle("active", i === solved);
+    d.classList.toggle("locked", i > solved);
+    if (i !== solved) d.classList.remove("bad");
+    o.inp.disabled = i !== solved; o.btn.disabled = i !== solved;
+    $(".state", d).textContent = i < solved ? "✓" : i > solved ? "🔒" : "";
+    if (i < solved) { o.msg.textContent = ""; o.btn.textContent = "Certo!"; }
+  });
+
+  const cooldown = o => {
+    clearInterval(timer);
+    const tick = () => {
+      const m = lsGet(MISS_KEY, { misses: 0, until: 0 });
+      const left = Math.ceil((m.until - Date.now()) / 1000);
+      if (left > 0) { o.btn.disabled = true; o.inp.disabled = true; o.btn.textContent = `Aguarde ${left}s`; return; }
+      clearInterval(timer); timer = null;
+      o.btn.disabled = false; o.inp.disabled = false; o.btn.textContent = "Testar";
+    };
+    tick(); timer = setInterval(tick, 250);
+  };
+
+  const test = o => {
+    if (o.i !== solved || o.btn.disabled) return;
+    const raw = o.inp.value.replace(/\D/g, "");
+    if (!raw) { o.inp.classList.remove("shake"); void o.inp.offsetWidth; o.inp.classList.add("shake"); o.msg.textContent = "Digite um número primeiro 😊"; return; }
+    if (lockOk(o.i, parseInt(raw, 10))) {
+      o.inp.value = pad2(parseInt(raw, 10)); o.inp.blur();
+      solved = o.i + 1; lsSet(LOCK_KEY, solved); lsSet(MISS_KEY, { misses: 0, until: 0 });
+      clearInterval(timer); timer = null;
+      if (navigator.vibrate) try { navigator.vibrate(solved === 4 ? [80, 50, 80, 50, 160] : 70); } catch (e) {}
+      o.d.classList.add("pop"); paint();
+      if (solved === 4) setTimeout(() => unlock(panel, app), 600);
+      else setTimeout(() => { const n = dials[solved]; n.d.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => n.inp.focus({ preventScroll: true }), 450); }, 350);
+    } else {
+      const m = lsGet(MISS_KEY, { misses: 0, until: 0 });
+      const misses = (m.misses || 0) + 1;
+      const secs = Math.min(CONFIG.COOLDOWN_MAX, CONFIG.COOLDOWN_BASE + CONFIG.COOLDOWN_STEP * (misses - 1));
+      lsSet(MISS_KEY, { misses, until: Date.now() + secs * 1000 });
+      o.d.classList.remove("bad", "flash"); void o.d.offsetWidth; o.d.classList.add("bad", "flash");
+      if (navigator.vibrate) try { navigator.vibrate([40, 40, 40]); } catch (e) {}
+      o.msg.textContent = WRONG_MSGS[(misses - 1) % WRONG_MSGS.length];
+      cooldown(o);
+    }
+  };
+
+  dials.forEach(o => {
+    o.btn.addEventListener("click", () => test(o));
+    o.inp.addEventListener("input", () => { o.inp.value = o.inp.value.replace(/\D/g, "").slice(0, 2); o.d.classList.remove("bad"); });
+    o.inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); test(o); } });
+  });
+  paint();
+  if (solved >= 4) { unlock(panel, app, true); return; }
+  if (lsGet(MISS_KEY, { until: 0 }).until > Date.now()) { dials[solved].d.classList.add("bad"); dials[solved].msg.textContent = WRONG_MSGS[0]; cooldown(dials[solved]); }
+  setTimeout(() => dials[solved].d.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+}
+
+function unlock(panel, app, instant) {
+  panel.classList.add("open");
+  const burst = () => {
+    for (let i = 0; i < 26; i++) {
+      const h = el("div", "burst"); h.textContent = ["❤️", "💖", "💕", "✨"][i % 4];
+      const a = Math.random() * Math.PI * 2, r = 120 + Math.random() * 160;
+      h.style.setProperty("--x", Math.cos(a) * r + "px"); h.style.setProperty("--y", Math.sin(a) * r + "px");
+      h.style.animationDelay = Math.random() * 0.25 + "s"; document.body.append(h); setTimeout(() => h.remove(), 2200);
+    }
+  };
+  const done = el("article", "card done");
+  done.innerHTML = `<h2>${esc(CONFIG.LOCK_DONE_TITLE)}</h2><div class="body"><p style="animation-delay:.4s">${esc(CONFIG.LOCK_DONE_TEXT)}</p></div>`;
+  if (instant) { app.append(done); return; }
+  setTimeout(burst, 700);
+  setTimeout(() => { app.append(done); done.scrollIntoView({ behavior: "smooth", block: "center" }); }, 1500);
 }
 
 function renderLocked(app, idx) {
@@ -254,7 +374,7 @@ function renderMessage(app, big, title, text) {
   const app = $("#app");
   const params = new URLSearchParams(location.search);
   if (params.has("reset")) { // para o Arthur testar: adicione ?reset no final da URL
-    try { localStorage.removeItem(KEY); } catch (e) {}
+    try { localStorage.removeItem(KEY); localStorage.removeItem(LOCK_KEY); localStorage.removeItem("nmc_lock_miss_v1"); } catch (e) {}
     history.replaceState(null, "", location.pathname);
     renderMessage(app, "🧹", "Tudo zerado", "O progresso deste aparelho foi apagado.");
     return;
