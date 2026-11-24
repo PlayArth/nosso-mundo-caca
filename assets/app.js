@@ -14,8 +14,10 @@ const CONFIG = {
   // COOLDOWN_STEP a cada erro seguido no mesmo número, até COOLDOWN_MAX.
   COOLDOWN_BASE: 3, COOLDOWN_STEP: 2, COOLDOWN_MAX: 15,
   // Mensagem final quando os 4 números ficam verdes.
-  LOCK_DONE_TITLE: "Você conseguiu! ❤️",
-  LOCK_DONE_TEXT: "Agora espera o Arthur…",
+  LOCK_DONE_TITLE: "Essa música te lembra algo ??",
+  LOCK_DONE_TEXT: "",            // linha extra opcional embaixo do título (vazio = não aparece)
+  SONG_ID: "LjhCEhWiKXk",        // id do vídeo no YouTube (youtu.be/<id>)
+  SONG_NAME: "Just The Way You Are – Bruno Mars",
 
   // (Opcional) Se houver um próximo QR depois da fase 3, coloque a URL completa
   // aqui; aí a câmera aparece na fase 3. Vazio = sem câmera na fase 3.
@@ -305,7 +307,7 @@ function renderLock(app) {
       clearInterval(timer); timer = null;
       if (navigator.vibrate) try { navigator.vibrate(solved === 4 ? [80, 50, 80, 50, 160] : 70); } catch (e) {}
       o.d.classList.add("pop"); paint();
-      if (solved === 4) setTimeout(() => unlock(panel, app), 600);
+      if (solved === 4) { const song = songCard(app, true); setTimeout(() => unlock(panel, app, false, song), 600); }
       else setTimeout(() => { const n = dials[solved]; n.d.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => n.inp.focus({ preventScroll: true }), 450); }, 350);
     } else {
       const m = lsGet(MISS_KEY, { misses: 0, until: 0 });
@@ -325,26 +327,67 @@ function renderLock(app) {
     o.inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); test(o); } });
   });
   paint();
-  if (solved >= 4) { unlock(panel, app, true); return; }
+  if (solved >= 4) { unlock(panel, app, true, songCard(app, false)); return; }
   if (lsGet(MISS_KEY, { until: 0 }).until > Date.now()) { dials[solved].d.classList.add("bad"); dials[solved].msg.textContent = WRONG_MSGS[0]; cooldown(dials[solved]); }
   setTimeout(() => dials[solved].d.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
 }
 
-function unlock(panel, app, instant) {
+/* ---------- música final (YouTube) ---------- */
+// Criado já no toque do último "Testar" (gesto do usuário) para o autoplay ter chance.
+function songCard(app, autoplay) {
+  const id = CONFIG.SONG_ID;
+  const card = el("article", "card done pending");
+  card.innerHTML = `<h2>${esc(CONFIG.LOCK_DONE_TITLE)}</h2>
+    ${CONFIG.LOCK_DONE_TEXT ? `<div class="body"><p style="animation-delay:.3s">${esc(CONFIG.LOCK_DONE_TEXT)}</p></div>` : ""}
+    <p class="song-name">🎵 ${esc(CONFIG.SONG_NAME)}</p>
+    <div class="player" style="background-image:url('https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg')"></div>
+    <button class="play-big" type="button">▶ Tocar</button>
+    <a class="yt-link" href="https://youtu.be/${encodeURIComponent(id)}" target="_blank" rel="noopener">Abrir no YouTube</a>`;
+  app.append(card);
+  const box = $(".player", card), btn = $(".play-big", card);
+  let frame = null, playing = false;
+  const send = (func, args) => { try { frame && frame.contentWindow.postMessage(JSON.stringify({ event: "command", func, args: args || [] }), "*"); } catch (e) {} };
+  const setPlaying = v => { playing = v; card.classList.toggle("playing", v); btn.textContent = v ? "❚❚ Pausar" : "▶ Tocar"; };
+  const make = () => {
+    if (frame) frame.remove();
+    frame = document.createElement("iframe");
+    frame.className = "yt";
+    frame.title = CONFIG.SONG_NAME;
+    frame.allow = "autoplay; encrypted-media; picture-in-picture";
+    frame.setAttribute("allowfullscreen", "");
+    frame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&playsinline=1&enablejsapi=1&rel=0&modestbranding=1&origin=${encodeURIComponent(location.origin)}`;
+    frame.addEventListener("load", () => { try { frame.contentWindow.postMessage(JSON.stringify({ event: "listening", id: 1 }), "*"); } catch (e) {} send("unMute"); send("playVideo"); });
+    box.append(frame); card.classList.add("has-frame");
+  };
+  window.addEventListener("message", e => {
+    if (!frame || e.source !== frame.contentWindow) return;
+    let d; try { d = typeof e.data === "string" ? JSON.parse(e.data) : e.data; } catch (x) { return; }
+    const st = d && (d.event === "onStateChange" ? d.info : d.info && d.info.playerState);
+    if (st === 1) setPlaying(true); else if (st === 0 || st === 2) setPlaying(false);
+  });
+  btn.addEventListener("click", () => {
+    if (!frame) { make(); return; }             // ainda sem player: cria tocando (gesto do toque)
+    if (playing) { send("pauseVideo"); setPlaying(false); return; }
+    send("unMute"); send("playVideo");
+    setTimeout(() => { if (!playing) make(); }, 1200); // se não respondeu, recria com autoplay
+  });
+  if (autoplay) make();
+  return card;
+}
+
+function unlock(panel, app, instant, done) {
   panel.classList.add("open");
   const burst = () => {
     for (let i = 0; i < 26; i++) {
-      const h = el("div", "burst"); h.textContent = ["❤️", "💖", "💕", "✨"][i % 4];
+      const h = el("div", "burst"); h.textContent = ["❤️", "💖", "💕", "🎵"][i % 4];
       const a = Math.random() * Math.PI * 2, r = 120 + Math.random() * 160;
       h.style.setProperty("--x", Math.cos(a) * r + "px"); h.style.setProperty("--y", Math.sin(a) * r + "px");
       h.style.animationDelay = Math.random() * 0.25 + "s"; document.body.append(h); setTimeout(() => h.remove(), 2200);
     }
   };
-  const done = el("article", "card done");
-  done.innerHTML = `<h2>${esc(CONFIG.LOCK_DONE_TITLE)}</h2><div class="body"><p style="animation-delay:.4s">${esc(CONFIG.LOCK_DONE_TEXT)}</p></div>`;
-  if (instant) { app.append(done); return; }
+  if (instant) { done.classList.remove("pending"); return; }
   setTimeout(burst, 700);
-  setTimeout(() => { app.append(done); done.scrollIntoView({ behavior: "smooth", block: "center" }); }, 1500);
+  setTimeout(() => { done.classList.remove("pending"); done.scrollIntoView({ behavior: "smooth", block: "center" }); }, 1500);
 }
 
 function renderLocked(app, idx) {

@@ -126,3 +126,15 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
 .card.done .body p{margin:0}
 .burst{position:fixed;left:50%;top:40%;z-index:40;font-size:1.6rem;pointer-events:none;animation:burst 1.8s cubic-bezier(.2,.8,.3,1) forwards}
 @keyframes burst{from{transform:translate(-50%,-50%) scale(.3);opacity:1}to{transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) scale(1.2);opacity:0}}
+
+/* ---------- música final ---------- */
+.card.done.pending{position:absolute;left:-9999px;width:320px;opacity:0;pointer-events:none;animation:none}
+.card.done h2{margin-bottom:6px}
+.song-name{margin:10px 0 16px;font:700 1.08rem Quicksand,sans-serif;color:var(--rose-d)}
+.player{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#3a1520 center/cover no-repeat;box-shadow:0 10px 24px #6d0b2540}
+.player::after{content:"🎵";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:2.6rem;background:#3a152066}
+.card.has-frame .player::after{display:none}
+.player iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.play-big{display:block;width:100%;margin:16px 0 0;height:58px;border:none;border-radius:999px;background:linear-gradient(135deg,#ff5c7a,var(--rose-d));color:#fff;font:700 1.25rem Quicksand,sans-serif;box-shadow:0 10px 22px #b81f4366;cursor:pointer;touch-action:manipulation;animation:pulse 1.8s ease-in-out infinite}
+.card.playing .play-big{animation:none;background:#c9a0aa;box-shadow:none;font-size:1.05rem;height:46px}
+.yt-link{display:inline-block;margin-top:12px;font-size:.88rem;color:var(--rose-d);opacity:.8}
